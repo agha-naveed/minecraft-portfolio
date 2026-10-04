@@ -6,6 +6,8 @@ import gsap from 'gsap'
 import {PROJECTS,SKILLS,EXPERIENCE,CONTACT,ABOUT} from './data.js'
 import {sfx} from './sfx.js'
 
+const FONT='https://cdn.jsdelivr.net/fontsource/fonts/poppins@latest/latin-700-normal.woff'
+const T=p=><Text font={FONT} {...p}/>
 /* ---------- textures / materials ---------- */
 function tex(base,noise,top=0){
  const c=document.createElement('canvas');c.width=c.height=16;const g=c.getContext('2d')
@@ -17,100 +19,109 @@ const dirt=M([120,85,55],40),side=L(tex([120,85,55],40,4)),gm=c=>[side,side,M(c,
 const MATS={grass:gm([85,155,60]),moss:gm([45,115,50]),dirt,stone:M([125,125,125],45),planks:M([175,135,80]),brick:M([150,70,60],40),
  log:M([100,75,45],35),leaves:M([40,120,40],60),blossom:M([240,150,190],30),path:M([165,150,110],35),gold:M([240,200,60],40),sand:M([225,210,150],20),
  lapis:M([40,70,170],30),obsidian:M([35,22,55],15),quartz:M([235,235,228],10)}
-const BOX=new THREE.BoxGeometry(1,1,1),TYPES=Object.keys(MATS),CAP={grass:18000,moss:9000,dirt:12000,stone:12000,leaves:14000}
+const BOX=new THREE.BoxGeometry(1,1,1),TYPES=Object.keys(MATS),CAP={grass:30000,moss:30000,dirt:20000,stone:20000,leaves:16000}
 const ORDER=['dirt','stone','planks','log','leaves','brick','path','bow']
 const COL={dirt:'#785537',stone:'#7d7d7d',planks:'#af8750',log:'#644b2d',leaves:'#32792a',brick:'#96463c',path:'#a59670'}
 const HARD={grass:.5,moss:.5,dirt:.4,stone:1.2,planks:.8,log:.9,leaves:.2,blossom:.2,brick:1.2,path:.4,sand:.3}
 const DROP={grass:'dirt',moss:'dirt',sand:'path',blossom:'leaves'}
-const WATERMAT=new THREE.MeshLambertMaterial({color:'#3a7bd5',transparent:true,opacity:.62,depthWrite:false})
+const WATERMAT=new THREE.MeshBasicMaterial({color:'#1f6fe0',transparent:true,opacity:.8,depthWrite:false})
 
-/* ---------- jungle terrain ---------- */
-const R=64,N=2*R,K=(x,y,z)=>x+','+y+','+z,W=new Map(),FIXED=new Set(),GONE=new Set(),WATER=new Set(),WCOLS=[]
-const inb=(x,z)=>x>=-R&&x<R&&z>=-R&&z<R
+/* ---------- jungle terrain (long map: 100 wide x 260 long) ---------- */
+const RX=50,RZ=130,NX=RX*2,NZ=RZ*2,GZ=100
+const K=(x,y,z)=>x+','+y+','+z,W=new Map(),FIXED=new Set(),GONE=new Set(),WATER=new Set(),WCOLS=[]
+const inb=(x,z)=>x>=-RX&&x<RX&&z>=-RZ&&z<RZ
 const put=(x,y,z,t,f)=>{if(!inb(x,z))return;W.set(K(x,y,z),t);if(f)FIXED.add(K(x,y,z))}
 const hs=(x,z)=>{const s=Math.sin(x*127.1+z*311.7)*43758.5453;return s-Math.floor(s)}
 const vn=(x,z)=>{const xi=Math.floor(x),zi=Math.floor(z),xf=x-xi,zf=z-zi,u=xf*xf*(3-2*xf),v=zf*zf*(3-2*zf)
  const a=hs(xi,zi),b=hs(xi+1,zi),c=hs(xi,zi+1),d=hs(xi+1,zi+1);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v}
-const RECTS=[[-9,9,-9,9],[-4,4,-38,0],[-30,0,-4,4],[0,30,-4,4],[-4,4,0,32],[-37,37,-64,-35],[-64,-27,-28,28],[27,64,-23,23]]
+const RECTS=[[-9,9,-9,9],[-3,3,-84,86],[-12,0,-48,-42],[0,12,42,48],[-41,41,-129,-83],[-49,-11,-73,-17],[11,49,17,73]]
 const dFlat=(x,z)=>Math.min(...RECTS.map(([a,b,c,d])=>Math.hypot(Math.max(a-x,0,x-b),Math.max(c-z,0,z-d))))
-const HT=new Int8Array(N*N),ht=(x,z)=>inb(x,z)?HT[(x+R)*N+z+R]:0
-for(let x=-R;x<R;x++)for(let z=-R;z<R;z++){
+const HT=new Int8Array(NX*NZ),ht=(x,z)=>inb(x,z)?HT[(x+RX)*NZ+z+RZ]:0
+for(let x=-RX;x<RX;x++)for(let z=-RZ;z<RZ;z++){
  let h=Math.round((vn(x/16,z/16)*.65+vn(x/6,z/6)*.35-.42)*16*Math.min(1,dFlat(x,z)/7))
- const dg=Math.hypot(x,z-46);if(dg<16){const t=Math.min(1,(16-dg)/7);h=Math.round(h*(1-t)+4*t)}
- if(Math.hypot(x-27,z-47)<9)h=Math.hypot(x-27,z-47)<6?-2:-1
- HT[(x+R)*N+z+R]=Math.max(-2,Math.min(9,h))}
+ const dg=Math.hypot(x,z-GZ);if(dg<16){const t=Math.min(1,(16-dg)/7);h=Math.round(h*(1-t)+4*t)}
+ const dl=Math.hypot(x-28,z-GZ-1);if(dl<9)h=dl<6?-2:-1
+ HT[(x+RX)*NZ+z+RZ]=Math.max(-2,Math.min(9,h))}
 const topType=(x,z,h)=>h<0?'sand':h>=7?'stone':vn(x/4+9,z/4)>.62?'moss':'grass'
 const nat=(x,y,z)=>{const h=ht(x,z),d=h-1-y;return d===0?topType(x,z,h):h<0?'sand':d<=2?'dirt':'stone'}
-for(let x=-R;x<R;x++)for(let z=-R;z<R;z++){const h=ht(x,z)
+for(let x=-RX;x<RX;x++)for(let z=-RZ;z<RZ;z++){const h=ht(x,z)
  if(h<0){WATER.add(x+','+z);WCOLS.push([x,z])}
  for(let y=Math.max(-3,Math.min(h-1,ht(x+1,z),ht(x-1,z),ht(x,z+1),ht(x,z-1)));y<=h-1;y++)put(x,y,z,nat(x,y,z),y===-3)}
 function fillAround(x,y,z){for(const [a,b,c] of[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]){
  const X=x+a,Y=y+b,Z=z+c,k=K(X,Y,Z);if(Y<-3||!inb(X,Z)||Y>=ht(X,Z)||W.has(k)||GONE.has(k))continue;put(X,Y,Z,nat(X,Y,Z),Y===-3)}}
 
 /* ---------- structures ---------- */
-const LABELS=[],GATES=[],ZONES=[],SK=[],HEADS=[],PAV=[]
+const LABELS=[],GATES=[],ZONES=[],SK=[],PAV=[]
 const floor=(x0,x1,z0,z1,t,y=-1)=>{for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++)put(x,y,z,t)}
-floor(-4,3,-4,3,'brick');floor(-1,1,-35,-5,'path');floor(-27,-5,-1,1,'path');floor(5,27,-1,1,'path');floor(-1,1,5,31,'path')
-function compound(x0,x1,z0,z1,side,text,wm,tm){
+floor(-4,3,-4,3,'brick');floor(-1,1,-83,-5,'path');floor(-1,1,5,83,'path');floor(-11,-1,-46,-44,'path');floor(1,11,44,46,'path')
+for(let z=84;z<=GZ-8;z++)for(let x=-1;x<=1;x++)put(x,ht(x,z)-1,z,'path')
+function compound(x0,x1,z0,z1,side,c,text,wm,tm){
  for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++){
   if(!(x<x0+2||x>x1-2||z<z0+2||z>z1-2))continue
-  const t=side==='S'?x:z,gate=side==='S'?z>=z1-1:side==='E'?x>=x1-1:x<=x0+1,at=Math.abs(t),door=gate&&at<=2
+  const t=(side==='S'?x:z)-c,gate=side==='S'?z>=z1-1:side==='E'?x>=x1-1:x<=x0+1,at=Math.abs(t),door=gate&&at<=2
   for(let y=0;y<14;y++){if(door&&y<6)continue
    put(x,y,z,y===13?tm:gate&&at>=3&&at<=4&&y<10?tm:door&&y<10?'obsidian':wm,1)}}
- GATES.push(side==='S'?{text,pos:[.5,8,z1+1.05],rot:0}:side==='E'?{text,pos:[x1+1.05,8,.5],rot:Math.PI/2}:{text,pos:[x0-.05,8,.5],rot:-Math.PI/2})}
-compound(-36,36,-63,-36,'S','PROJECTS','stone','gold')
-compound(-63,-28,-27,27,'E','SKILLS','lapis','quartz')
-compound(28,63,-22,22,'W','EXPERIENCE','brick','gold')
+ GATES.push(side==='S'?{text,pos:[c+.5,8,z1+1.05],rot:0}:side==='E'?{text,pos:[x1+1.05,8,c+.5],rot:Math.PI/2}:{text,pos:[x0-.05,8,c+.5],rot:-Math.PI/2})}
+compound(-40,40,-128,-84,'S',0,'PROJECTS','stone','gold')
+compound(-48,-12,-72,-18,'E',-45,'SKILLS','lapis','quartz')
+compound(12,48,18,72,'W',45,'EXPERIENCE','brick','gold')
 /* projects: one themed pavilion + big screen each */
 const THEMES=[{w:'planks',f:'sand',t:'gold',c:'#ffd24a'},{w:'stone',f:'lapis',t:'quartz',c:'#6ee7ff'},{w:'brick',f:'obsidian',t:'gold',c:'#ff8a8a'}]
-const PX=PROJECTS.map((_,i)=>Math.round((i-(PROJECTS.length-1)/2)*24)),ZB=-60
+const PX=PROJECTS.map((_,i)=>Math.round((i-(PROJECTS.length-1)/2)*26)),ZB=-122
 PROJECTS.forEach((p,i)=>{const cx=PX[i],th=THEMES[i%3]
  floor(cx-7,cx+7,ZB,ZB+12,th.f)
  for(let x=cx-7;x<=cx+7;x++)for(let y=0;y<=8;y++)put(x,y,ZB,Math.abs(x-cx)===7||y===8?th.t:th.w,1)
  for(const sx of[-7,7]){for(let z=ZB+1;z<=ZB+11;z++)for(let y=0;y<=1;y++)put(cx+sx,y,z,th.w,1);for(let y=0;y<=6;y++)put(cx+sx,y,ZB+12,y===6?'gold':th.t,1)}
  PAV.push({p,i,cx,th});LABELS.push({t:p.t,x:cx+.5,y:10.4,z:ZB+1.6,c:th.c,s:1.2});ZONES.push({id:'p'+i,x:cx+.5,z:ZB+7,r:9,name:p.t})})
-/* experience boards */
-const MS=EXPERIENCE.map((e,i)=>({e,x:38+i*10,z:i%2?-10:10}))
-MS.forEach(({x,z})=>{if(z>0)floor(x-5,x+5,z-11,z-1,'sand');else floor(x-5,x+5,z+1,z+11,'sand')
- for(let dx=-3;dx<=3;dx++)for(let y=0;y<=4;y++)put(x+dx,y,z,y===4||Math.abs(dx)===3?'gold':'quartz',1)
- ZONES.push({id:'exp',x:x+.5,z:z>0?z-5:z+6,r:7,name:'Experience'})})
-/* skills arena: floating icons, shooter at (-34,0) */
-floor(-61,-30,-25,25,'sand');floor(-36,-32,-2,2,'quartz')
-SKILLS.forEach((c,j)=>{const th=(-45+22.5*j)*Math.PI/180,r=j%2?14:25,ux=-Math.cos(th),uz=Math.sin(th),tx=Math.sin(th),tz=Math.cos(th),cx=-34+r*ux,cz=r*uz
- HEADS.push({t:c.cat.toUpperCase(),x:cx,z:cz,y:13+(j%2)*2})
+/* experience hall: checker floor, red carpet, raised stages with dark boards */
+for(let x=14;x<=46;x++)for(let z=19;z<=71;z++)put(x,-1,z,(x+z)%2?'quartz':'sand')
+floor(13,46,44,46,'brick');floor(13,46,43,43,'gold');floor(13,46,47,47,'gold')
+const MS=EXPERIENCE.map((e,i)=>({e,x:20+i*10,n:i%2===0}))
+MS.forEach(({x,n})=>{const [pz0,pz1,bz]=n?[33,40,32]:[50,57,58]
+ floor(x-5,x+5,pz0,pz1,'quartz',0)
+ for(let dx=-4;dx<=4;dx++)for(let y=1;y<=6;y++)put(x+dx,y,bz,Math.abs(dx)===4||y===1||y===6?'gold':'obsidian',1)
+ for(const sx of[-5,5])for(let y=1;y<=3;y++)put(x+sx,y,n?pz1:pz0,y===3?'gold':'quartz',1)
+ ZONES.push({id:'exp',x:x+.5,z:n?37:54,r:8,name:'Experience'})})
+/* skills arena: floating icons, shooter podium at (-18,-45) */
+floor(-46,-20,-69,-21,'sand');floor(-20,-16,-47,-43,'quartz')
+SKILLS.forEach((c,j)=>{const th=(-45+22.5*j)*Math.PI/180,r=j%2?12:22,ux=-Math.cos(th),uz=Math.sin(th),tx=Math.sin(th),tz=Math.cos(th),cx=-18+r*ux,cz=-45+r*uz
  c.items.forEach(([n,u],i)=>{const o=(i-(c.items.length-1)/2)*3;SK.push({n,u,x:cx+tx*o,z:cz+tz*o,y:6+(i%2)*3,alive:true})})})
-ZONES.push({id:'skills',x:-34,z:.5,r:14,name:'Skills Arena - all skills'})
+ZONES.push({id:'skills',x:-18,z:-44.5,r:16,name:'Skills Arena - all skills'})
 /* about garden: plateau (y=4) with portrait pavilion */
-for(let z=30;z<=40;z++)for(let x=-1;x<=1;x++)put(x,ht(x,z)-1,z,'path')
-floor(-7,7,39,52,'quartz',3)
-for(let x=-7;x<=7;x++)for(let y=4;y<=11;y++)put(x,y,52,Math.abs(x)===7||y===11?'gold':'quartz',1)
-for(const px of[-7,7])for(const pz of[39,45])for(let y=4;y<=10;y++)put(px,y,pz,y===10?'gold':'quartz',1)
-for(let x=-7;x<=7;x++)for(let z=39;z<=51;z++)put(x,11,z,x===-7||x===7||z===39||z===51?'gold':'quartz',1)
-ZONES.push({id:'about',x:.5,z:46,r:9,name:'About Agha Naveed'})
-/* plaza signposts */
-;[[3,-6,'↑ PROJECTS'],[-6,-3,'← SKILLS'],[6,3,'EXPERIENCE →'],[-3,6,'↓ ABOUT ME']].forEach(([x,z,t])=>{for(let y=0;y<3;y++)put(x,y,z,'planks',1);LABELS.push({t,x:x+.5,y:4,z:z+.5,c:'#ffd24a',s:.8,bb:1})})
-/* jungle trees, bushes, cherry trees */
+const gx0=GZ-7
+for(let x=-7;x<=7;x++)for(let z=gx0;z<=GZ+6;z++){for(let y=ht(x,z);y<3;y++)put(x,y,z,'dirt');put(x,3,z,'quartz')}
+for(let x=-7;x<=7;x++)for(let y=4;y<=11;y++)put(x,y,GZ+6,Math.abs(x)===7||y===11?'gold':'quartz',1)
+for(const px of[-7,7])for(const pz of[gx0,GZ-1])for(let y=4;y<=10;y++)put(px,y,pz,y===10?'gold':'quartz',1)
+for(let x=-7;x<=7;x++)for(let z=gx0;z<=GZ+5;z++)put(x,11,z,x===-7||x===7||z===gx0||z===GZ+5?'gold':'quartz',1)
+ZONES.push({id:'about',x:.5,z:GZ-.5,r:9,name:'About Agha Naveed'})
+/* signposts + lamp posts along the road */
+const sign=(x,z,t)=>{for(let y=0;y<3;y++)put(x,y,z,'planks',1);LABELS.push({t,x:x+.5,y:4.2,z:z+.5,c:'#ffd24a',s:.8,bb:1})}
+sign(3,-6,'↑ NORTH\nProjects · Skills');sign(-4,6,'↓ SOUTH\nExperience · About Me')
+sign(-4,-50,'← SKILLS ARENA');sign(3,-50,'↑ PROJECTS');sign(3,50,'EXPERIENCE HALL →');sign(-4,50,'↓ ABOUT ME')
+for(let z=-80;z<=80;z+=12)if(Math.abs(z)>8&&Math.abs(z+45)>5&&Math.abs(z-45)>5)for(const x of[-2,2]){put(x,0,z,'log',1);put(x,1,z,'log',1);put(x,2,z,'gold',1)}
+/* jungle: trees, bushes, cherry trees */
 function tree(x,z,hgt,leaf,rad=3){const b=ht(x,z);for(let y=0;y<hgt;y++)put(x,b+y,z,'log')
  for(let dx=-rad;dx<=rad;dx++)for(let dz=-rad;dz<=rad;dz++)for(let dy=-1;dy<=2;dy++)if(dx*dx+dz*dz+(dy*1.6)**2<=rad*rad+.5&&!W.has(K(x+dx,b+hgt+dy,z+dz)))put(x+dx,b+hgt+dy,z+dz,leaf)}
 let sd=7;const rnd=()=>(sd=sd*16807%2147483647)/2147483647
-for(let n=0;n<700;n++){const x=Math.floor(rnd()*124-62),z=Math.floor(rnd()*124-62),h=ht(x,z),r=rnd()
- if(h<0||dFlat(x,z)<3||Math.hypot(x,z-46)<19||Math.hypot(x-27,z-47)<11)continue
- if(r<.3)tree(x,z,7+Math.floor(rnd()*5),'leaves');else if(r<.75){put(x,h,z,'leaves');if(rnd()<.5)put(x,h+1,z,'leaves')}}
-for(let i=0;i<9;i++){const a=i/9*Math.PI*2+.3,x=Math.round(Math.cos(a)*12),z=Math.round(46+Math.sin(a)*12);if(Math.abs(x)>3||z>44)tree(x,z,5,'blossom',2)}
-const HORSES=[[6,7,'#8b5a2b'],[-7,8,'#f2f2f2'],[3,28,'#2b2b2b']].map(([x,z,col])=>({x,z,y:0,rot:0,col,moving:false}))
+for(let n=0;n<2600;n++){const x=Math.floor(rnd()*98-49),z=Math.floor(rnd()*258-129),h=ht(x,z),r=rnd()
+ if(h<0||dFlat(x,z)<3||Math.hypot(x,z-GZ)<19||Math.hypot(x-28,z-GZ-1)<11)continue
+ if(r<.22)tree(x,z,7+Math.floor(rnd()*5),'leaves');else if(r<.6){put(x,h,z,'leaves');if(rnd()<.5)put(x,h+1,z,'leaves')}}
+for(let i=0;i<9;i++){const a=i/9*Math.PI*2+.3,x=Math.round(Math.cos(a)*12),z=Math.round(GZ+Math.sin(a)*12);if(Math.abs(x)>3||z>GZ-6)tree(x,z,5,'blossom',2)}
+const HORSES=[[6,7,'#8b5a2b'],[-7,8,'#f2f2f2'],[2.5,-30,'#2b2b2b'],[-2.5,40,'#c98a4a']].map(([x,z,col])=>({x,z,y:ht(Math.floor(x),Math.floor(z)),rot:0,col,moving:false}))
 const INFO={x:0,z:6,yaw:0}
 
 function ray(o,d,reach=5){let prev=null;for(let t=0;t<reach;t+=.04){
  const c=[Math.floor(o.x+d.x*t),Math.floor(o.y+d.y*t),Math.floor(o.z+d.z*t)];if(W.has(K(...c)))return{hit:c,prev};prev=c}return null}
 const col=(x,y,z)=>{for(const a of[-.3,.3])for(const b of[-.3,.3])if(W.has(K(Math.floor(x+a),Math.floor(y),Math.floor(z+b))))return true;return false}
 const body=(x,y,z)=>col(x,y+.05,z)||col(x,y+.95,z)||col(x,y+1.75,z)
-const NOBUILD=[[-39,39,-66,-33],[-66,-25,-30,30],[25,66,-25,25],[-9,9,36,56]]
+const NOBUILD=[[-43,43,-131,-81],[-51,-9,-75,-15],[9,51,15,75],[-9,9,GZ-10,GZ+10]]
 const noBuild=(x,y,z)=>y>10||NOBUILD.some(([a,b,c,d])=>x>=a&&x<=b&&z>=c&&z<=d)
 const inR=(x,z,[a,b,c,d])=>x>=a&&x<=b&&z>=c&&z<=d
-const areaAt=(x,z,wet)=>inR(x,z,[-36,37,-63,-35])?'📁 Projects Gallery':inR(x,z,[-64,-27,-28,28])?'🏹 Skills Arena':inR(x,z,[28,64,-22,23])?'💼 Experience Hall':
- Math.hypot(x,z-46)<17?'🌸 About Garden':Math.abs(x)<9&&Math.abs(z)<9?'🏠 Spawn Plaza':wet?'🌊 Lake':'🌴 Jungle'
+const areaAt=(x,z,wet)=>inR(x,z,[-40,41,-128,-83])?'📁 Projects Gallery':inR(x,z,[-48,-11,-72,-17])?'🏹 Skills Arena':inR(x,z,[12,49,18,73])?'💼 Experience Hall':
+ Math.hypot(x,z-GZ)<17?'🌸 About Garden':Math.abs(x)<9&&Math.abs(z)<9?'🏠 Spawn Plaza':wet?'🌊 Lake':Math.abs(x)<4?'🛤 Main Road':'🌴 Jungle'
 
 /* ---------- rendering ---------- */
+const WGEO=new THREE.BoxGeometry(1,.88,1)
 function Blocks({ver}){
  const refs=useRef({}),wr=useRef()
  useLayoutEffect(()=>{const m=new THREE.Matrix4(),n={};TYPES.forEach(t=>n[t]=0)
@@ -118,7 +129,7 @@ function Blocks({ver}){
   TYPES.forEach(t=>{const r=refs.current[t];r.count=n[t];r.instanceMatrix.needsUpdate=true})},[ver])
  useLayoutEffect(()=>{const m=new THREE.Matrix4();WCOLS.forEach(([x,z],i)=>wr.current.setMatrixAt(i,m.setPosition(x+.5,-.56,z+.5)));wr.current.instanceMatrix.needsUpdate=true},[])
  return <>{TYPES.map(t=><instancedMesh key={t} ref={e=>refs.current[t]=e} args={[BOX,MATS[t],CAP[t]||6000]} frustumCulled={false}/>)}
-  <instancedMesh ref={wr} args={[new THREE.BoxGeometry(1,.88,1),WATERMAT,WCOLS.length]} frustumCulled={false}/></>}
+  <instancedMesh ref={wr} args={[WGEO,WATERMAT,WCOLS.length]} frustumCulled={false} renderOrder={5}/></>}
 
 function drawSlide(g,p,i,ox,imgs,hue){
  g.save();g.translate(ox,0);const im=imgs[i]
@@ -147,7 +158,7 @@ function Portrait(){
  useEffect(()=>{new THREE.TextureLoader().load('/me.jpg',x=>{x.colorSpace=THREE.SRGBColorSpace;setTx(x)},undefined,()=>{
   const c=document.createElement('canvas');c.width=400;c.height=520;const g=c.getContext('2d');const gr=g.createLinearGradient(0,0,400,520);gr.addColorStop(0,'#3b6fd0');gr.addColorStop(1,'#1b2a52')
   g.fillStyle=gr;g.fillRect(0,0,400,520);g.fillStyle='#fff';g.font='bold 150px sans-serif';g.textAlign='center';g.fillText('AN',200,300);g.font='22px sans-serif';g.fillText('add public/me.jpg',200,360);setTx(new THREE.CanvasTexture(c))})},[])
- return <group position={[-2.7,7.6,51.9]} rotation={[0,Math.PI,0]}><mesh scale={[5.4,6.6,.2]} geometry={BOX}><meshBasicMaterial color="#5a3b1a"/></mesh>
+ return <group position={[-2.7,7.6,GZ+5.9]} rotation={[0,Math.PI,0]}><mesh scale={[5.4,6.6,.2]} geometry={BOX}><meshBasicMaterial color="#5a3b1a"/></mesh>
   <mesh position={[0,0,.12]}><planeGeometry args={[4.9,6.1]}/><meshBasicMaterial map={tx}/></mesh></group>}
 
 function Icon({t,i}){
@@ -157,9 +168,9 @@ function Icon({t,i}){
    g.fillStyle='#ffd24a';g.fillRect(0,0,64,64);g.fillStyle='#000';g.font='bold 44px monospace';g.fillText(t.n[0],18,48);setTx(new THREE.CanvasTexture(c))})},[])
  useFrame(s=>{r.current.visible=t.alive;r.current.position.set(t.x,t.y+Math.sin(s.clock.elapsedTime*1.5+i)*.4,t.z)})
  return <Billboard ref={r}>
-  <mesh><circleGeometry args={[1.35,24]}/><meshBasicMaterial color="#fff"/></mesh>
-  <mesh position={[0,0,.02]}><planeGeometry args={[1.7,1.7]}/><meshBasicMaterial map={tx} transparent/></mesh>
-  <Text position={[0,-1.8,0]} fontSize={.55} color="#fff" outlineWidth={.05} outlineColor="#000">{t.n}</Text></Billboard>}
+  <mesh><circleGeometry args={[1.7,28]}/><meshBasicMaterial color="#fff"/></mesh>
+  <mesh position={[0,0,-.01]} scale={1.1}><circleGeometry args={[1.7,28]}/><meshBasicMaterial color="#ffd24a"/></mesh>
+  <mesh position={[0,0,.02]}><planeGeometry args={[2.1,2.1]}/><meshBasicMaterial map={tx} transparent/></mesh></Billboard>}
 
 function Horse({h}){
  const g=useRef(),legs=useRef([]),m=c=><meshLambertMaterial color={c}/>
@@ -176,19 +187,23 @@ function Horse({h}){
 
 function World(){
  return <>
-  {LABELS.map((l,i)=>l.bb?<Billboard key={i} position={[l.x,l.y,l.z]}><Text fontSize={l.s} color={l.c} outlineWidth={.06} outlineColor="#000">{l.t}</Text></Billboard>
-   :<Text key={i} position={[l.x,l.y,l.z]} fontSize={l.s} color={l.c} outlineWidth={.07} outlineColor="#000">{l.t}</Text>)}
-  {GATES.map(g=><Text key={g.text} position={g.pos} rotation={[0,g.rot,0]} fontSize={Math.min(1.5,8.6/(g.text.length*.6))} color="#ffd24a" outlineWidth={.08} outlineColor="#2a0d0d">{g.text}</Text>)}
+  {LABELS.map((l,i)=>l.bb?<Billboard key={i} position={[l.x,l.y,l.z]}><T fontSize={l.s} color={l.c} outlineWidth={.06} outlineColor="#000" textAlign="center">{l.t}</T></Billboard>
+   :<T key={i} position={[l.x,l.y,l.z]} fontSize={l.s} color={l.c} outlineWidth={.07} outlineColor="#000">{l.t}</T>)}
+  {GATES.map(g=><T key={g.text} position={g.pos} rotation={[0,g.rot,0]} fontSize={Math.min(1.5,8.4/(g.text.length*.68))} color="#ffd24a" outlineWidth={.08} outlineColor="#2a0d0d">{g.text}</T>)}
   {PAV.map(({p,i,cx,th})=><group key={i}><Screen p={p} i={i} x={cx+.5} y={4.5} z={ZB+1.02}/><pointLight position={[cx+.5,6,ZB+6]} color={th.c} intensity={25} distance={16}/></group>)}
-  {MS.map(({e,x,z},i)=><Text key={i} position={[x+.5,2.6,z>0?z-.05:z+1.05]} rotation={[0,z>0?Math.PI:0,0]} fontSize={.4} maxWidth={5.4} lineHeight={1.3} color="#1c1c1c" anchorY="middle" textAlign="center">
-    {`${e.role}\n${e.org}  |  ${e.period}\n\n`+e.pts.map(p=>'• '+p).join('\n')}</Text>)}
-  {HEADS.map(h=><Billboard key={h.t} position={[h.x,h.y,h.z]}><Text fontSize={1.4} color="#ffd24a" outlineWidth={.08} outlineColor="#000">{h.t}</Text></Billboard>)}
+  {MS.map(({e,x,n},i)=>{const rot=n?0:Math.PI,tz=n?33.06:57.94,ex=x+.5
+   return <group key={i}>
+    <T position={[ex,5.55,tz]} rotation={[0,rot,0]} fontSize={.62} color="#ffd24a" maxWidth={7.4} textAlign="center">{e.role}</T>
+    <T position={[ex,4.8,tz]} rotation={[0,rot,0]} fontSize={.4} color="#7fe3ff" maxWidth={7.4} textAlign="center">{e.org+'  ·  '+e.period}</T>
+    <T position={[ex,4.2,tz]} rotation={[0,rot,0]} fontSize={.34} color="#ffffff" anchorY="top" maxWidth={7.2} lineHeight={1.4}>{e.pts.map(p=>'• '+p).join('\n')}</T>
+    <pointLight position={[ex,4,n?36:55]} color="#ffd24a" intensity={20} distance={14}/></group>})}
+  <Billboard position={[30,10,45]}><T fontSize={1.6} color="#ffd24a" outlineWidth={.08} outlineColor="#000">CAREER TIMELINE</T></Billboard>
   {SK.map((t,i)=><Icon key={t.n} t={t} i={i}/>)}
-  <Portrait/><pointLight position={[0,8,46]} color="#ffc0e0" intensity={30} distance={22}/>
-  <Text position={[3.2,7.6,51.88]} rotation={[0,Math.PI,0]} fontSize={.5} maxWidth={5.4} lineHeight={1.4} color="#1f2a44" anchorY="middle" textAlign="center">
-   {`${ABOUT.name}\n${ABOUT.role}\n\nGitHub: agha-naveed\nLinkedIn: agha-naveed\n\nPress E to open`}</Text>
+  <Portrait/><pointLight position={[0,8,GZ-1]} color="#ffc0e0" intensity={30} distance={22}/>
+  <T position={[3.2,7.6,GZ+5.88]} rotation={[0,Math.PI,0]} fontSize={.5} maxWidth={5.4} lineHeight={1.4} color="#1f2a44" anchorY="middle" textAlign="center">
+   {`${ABOUT.name}\n${ABOUT.role}\n\nGitHub: agha-naveed\nLinkedIn: agha-naveed\n\nPress E to open`}</T>
   {HORSES.map((h,i)=><Horse key={i} h={h}/>)}
-  {[[-30,30],[0,50],[30,28],[-25,-32],[22,-30],[50,-5],[-38,10],[5,-48]].map(([x,z],i)=><mesh key={i} position={[x*1.3,34+i%3*3,z*1.3]} scale={[10,1.5,6]} geometry={BOX}><meshBasicMaterial color="#fff"/></mesh>)}
+  {Array.from({length:16},(_,i)=><mesh key={i} position={[(i*37%120)-60,36+i%3*3,(i*61%300)-150]} scale={[10,1.5,6]} geometry={BOX}><meshBasicMaterial color="#fff"/></mesh>)}
  </>}
 
 function Hand({m,g}){
@@ -261,7 +276,7 @@ function Player({g,paused,onNear}){
     if(hz){let d=Math.atan2(mv.x,mv.z)-hz.rot;d=Math.atan2(Math.sin(d),Math.cos(d));hz.rot+=d*Math.min(1,dt*8)}
     const sp=(hz?(k.ShiftLeft?15:10):(k.ShiftLeft?8:5))*(wet?.55:1)*dt
     axis(mv.x*sp,0);axis(0,mv.z*sp)
-    p.x=THREE.MathUtils.clamp(p.x,-R+1,R-1);p.z=THREE.MathUtils.clamp(p.z,-R+1,R-1)
+    p.x=THREE.MathUtils.clamp(p.x,-RX+1,RX-1);p.z=THREE.MathUtils.clamp(p.z,-RZ+1,RZ-1)
     st.current+=dt;if(st.current>(hz?.22:k.ShiftLeft?.28:.4)&&gr.current&&!wet){st.current=0;sfx.step()}}
    if(k.Space&&gr.current&&!wet){vy.current=hz?10.5:9;sfx.jump()}}
   if(wet){vy.current=Math.max(-2.5,vy.current-6*dt);if(k.Space&&!paused)vy.current=Math.max(vy.current,3.2)}else vy.current-=24*dt
@@ -314,27 +329,27 @@ function Player({g,paused,onNear}){
 
 /* ---------- UI ---------- */
 const MC={grass:'#4c8f3a',moss:'#2f7a3a',stone:'#8a8a8a',sand:'#d8c98a',path:'#b09b6a',brick:'#9a4a40',quartz:'#eee',planks:'#af8750',lapis:'#3050b0',obsidian:'#302040',gold:'#e0b030',log:'#654',leaves:'#1f5a22',dirt:'#785537',blossom:'#f0a0c0'}
-const MARKS=[['PROJECTS',0,-50],['SKILLS',-46,0],['EXPERIENCE',46,0],['ABOUT ME',0,46],['PLAZA',0,0]]
+const MARKS=[['PROJECTS',0,-105],['SKILLS',-30,-45],['EXPERIENCE',30,45],['ABOUT ME',0,100],['PLAZA',0,0]]
 function Minimap(){
  const ref=useRef()
- useEffect(()=>{const bg=document.createElement('canvas');bg.width=bg.height=N;const b=bg.getContext('2d')
-  for(let x=-R;x<R;x++)for(let z=-R;z<R;z++){let c=null
-   for(let y=16;y>=-3;y--){const t=W.get(K(x,y,z));if(t){c=MC[t]||'#888';break}}
-   if(WATER.has(x+','+z)&&!W.has(K(x,-1,z)))c='#3a7bd5'
-   b.fillStyle=c||'#222';b.fillRect(x+R,z+R,1,1)}
-  const S=176,sc=S/N;let raf
-  const loop=()=>{const cv=ref.current;if(cv){const g=cv.getContext('2d');g.imageSmoothingEnabled=false;g.drawImage(bg,0,0,S,S)
-   g.font='bold 9px monospace';g.textAlign='center';g.lineWidth=3
-   MARKS.forEach(([t,x,z])=>{g.strokeStyle='#000';g.fillStyle='#ffd24a';g.strokeText(t,(x+R)*sc,(z+R)*sc);g.fillText(t,(x+R)*sc,(z+R)*sc)})
-   g.fillStyle='#8b5a2b';HORSES.forEach(h=>g.fillRect((h.x+R)*sc-2,(h.z+R)*sc-2,4,4))
-   g.save();g.translate((INFO.x+R)*sc,(INFO.z+R)*sc);g.rotate(Math.atan2(Math.cos(INFO.yaw),Math.sin(INFO.yaw)));g.fillStyle='#f00';g.strokeStyle='#fff';g.lineWidth=1.5
+ useEffect(()=>{const bg=document.createElement('canvas');bg.width=NX;bg.height=NZ;const b=bg.getContext('2d')
+  for(let x=-RX;x<RX;x++)for(let z=-RZ;z<RZ;z++){let c=null
+   for(let y=14;y>=-3;y--){const t=W.get(K(x,y,z));if(t){c=MC[t]||'#888';break}}
+   if(WATER.has(x+','+z)&&!W.has(K(x,-1,z)))c='#2a6fdb'
+   b.fillStyle=c||'#222';b.fillRect(x+RX,z+RZ,1,1)}
+  const sc=1;let raf
+  const loop=()=>{const cv=ref.current;if(cv){const g=cv.getContext('2d');g.imageSmoothingEnabled=false;g.drawImage(bg,0,0)
+   g.font='bold 10px Poppins, sans-serif';g.lineWidth=3;g.fillStyle='#ffd24a'
+   MARKS.forEach(([t,x,z])=>{g.textAlign=x>15?'right':x<-15?'left':'center';g.strokeStyle='#000';g.strokeText(t,(x+RX)*sc,(z+RZ)*sc);g.fillText(t,(x+RX)*sc,(z+RZ)*sc)})
+   g.fillStyle='#8b5a2b';HORSES.forEach(h=>g.fillRect((h.x+RX)*sc-2,(h.z+RZ)*sc-2,4,4))
+   g.save();g.translate((INFO.x+RX)*sc,(INFO.z+RZ)*sc);g.rotate(Math.atan2(Math.cos(INFO.yaw),Math.sin(INFO.yaw)));g.fillStyle='#f00';g.strokeStyle='#fff';g.lineWidth=1.5
    g.beginPath();g.moveTo(7,0);g.lineTo(-5,-5);g.lineTo(-5,5);g.closePath();g.fill();g.stroke();g.restore()}
    raf=requestAnimationFrame(loop)};loop();return()=>cancelAnimationFrame(raf)},[])
- return <canvas ref={ref} width={176} height={176} className="pointer-events-none absolute right-3 top-3 border-4 border-black"/>}
+ return <canvas ref={ref} width={NX} height={NZ} className="pointer-events-none absolute right-3 top-14 border-4 border-black"/>}
 
 function Chip({n,u,hit}){const [bad,setBad]=useState(false)
- return <span className={'item flex items-center gap-2 border-2 px-2 py-1 text-white '+(hit?'border-yellow-300 bg-[#4f7a2a]':'border-[#555] bg-[#8b8b8b]')}>
-  <span className="grid h-6 w-6 place-items-center bg-white p-0.5 text-black">{bad?<b>{n[0]}</b>:<img src={u} alt="" className="h-full w-full" onError={()=>setBad(true)}/>}</span>{n}{hit&&' ★'}</span>}
+ return <span title={n} className={'item grid h-16 w-16 place-items-center border-2 bg-white p-2 '+(hit?'border-yellow-400 ring-4 ring-yellow-300':'border-[#555]')}>
+  {bad?<b className="text-xl text-black">{n[0]}</b>:<img src={u} alt={n} className="h-full w-full object-contain" onError={()=>setBad(true)}/>}</span>}
 
 function Panel({id,hits,onClose}){
  const ref=useRef(),pi=/^p\d+$/.test(id)?+id.slice(1):-1,P=PROJECTS[pi]
@@ -344,12 +359,12 @@ function Panel({id,hits,onClose}){
   gsap.from('.item',{opacity:0,y:20,stagger:.04,delay:.25,duration:.35})},ref);return()=>c.revert()},[id])
  const card="item mb-3 block border-2 border-[#555] bg-[#8b8b8b] p-3 text-white hover:bg-[#6b8f3a]"
  return <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 p-4">
-  <div ref={ref} className="max-h-[90vh] w-full max-w-3xl overflow-auto border-4 border-black bg-[#c6c6c6] p-6 text-[10px] leading-5 text-[#373737] shadow-[inset_-4px_-4px_#555,inset_4px_4px_#fff]">
-   <h2 className="mb-4 text-base">{title}</h2>
+  <div ref={ref} className="max-h-[90vh] w-full max-w-3xl overflow-auto border-4 border-black bg-[#c6c6c6] p-6 text-[15px] leading-7 text-[#2b2b2b] shadow-[inset_-4px_-4px_#555,inset_4px_4px_#fff]">
+   <h2 className="mb-4 text-2xl font-bold">{title}</h2>
    {P&&<a href={P.l} target="_blank" rel="noreferrer" className={card}><p className="mb-2">{P.d}</p><i className="text-cyan-200">{P.s}</i><p className="mt-2 text-yellow-200">Open project ↗</p></a>}
-   {id==='skills'&&<><p className="item mb-3">Pick the bow (slot 8) and shoot the floating icons! ★ = already hit.</p>
-    {SKILLS.map(c=><div key={c.cat} className="mb-4"><h3 className="item mb-2 text-xs uppercase text-[#2d6a1f]">{c.cat}</h3><div className="flex flex-wrap gap-2">{c.items.map(([n,u])=><Chip key={n} n={n} u={u} hit={hits.includes(n)}/>)}</div></div>)}</>}
-   {id==='exp'&&EXPERIENCE.map(e=><div key={e.role} className={card}><b className="text-xs text-yellow-200">{e.role}</b> @ {e.org}<div className="text-cyan-200">{e.period}</div>{e.pts.map(p=><div key={p}>• {p}</div>)}</div>)}
+   {id==='skills'&&<><p className="item mb-4">Pick the bow (slot 8) and shoot the floating logos! Highlighted = already hit.</p>
+    <div className="flex flex-wrap gap-3">{SKILLS.flatMap(c=>c.items).map(([n,u])=><Chip key={n} n={n} u={u} hit={hits.includes(n)}/>)}</div></>}
+   {id==='exp'&&EXPERIENCE.map(e=><div key={e.role} className={card}><b className="text-lg text-yellow-200">{e.role}</b> @ {e.org}<div className="text-cyan-200">{e.period}</div>{e.pts.map(p=><div key={p}>• {p}</div>)}</div>)}
    {id==='about'&&<div className="item flex flex-col gap-4 md:flex-row">
     <img src="/me.jpg" alt="" className="h-56 w-44 shrink-0 border-4 border-black object-cover" onError={e=>e.currentTarget.style.display='none'}/>
     <div><p className="mb-2 text-sm">{ABOUT.name}</p><p className="mb-2 text-[#2d6a1f]">{ABOUT.role}</p><p className="mb-3">{ABOUT.bio}</p>
@@ -374,7 +389,7 @@ export default function App(){
  useEffect(()=>{gsap.from(title.current,{y:-60,opacity:0,duration:1,ease:'bounce.out'})},[])
  return <div className="relative h-full w-full select-none">
   <Canvas camera={{fov:75,near:.05,far:300}} gl={{antialias:false}}>
-   <Sky sunPosition={[100,60,50]}/><fog attach="fog" args={['#bcd8ff',55,150]}/>
+   <Sky sunPosition={[100,60,50]}/><fog attach="fog" args={['#bcd8ff',70,170]}/>
    <ambientLight intensity={1.1}/><directionalLight position={[30,50,20]} intensity={1.6}/>
    <Blocks ver={ver}/><World/>
    <Player g={g} paused={!!open||!locked} onNear={onNear}/>
@@ -382,19 +397,19 @@ export default function App(){
   </Canvas>
   {env.under&&<div className="pointer-events-none absolute inset-0 bg-blue-600/40"/>}
   <Minimap/>
-  <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 border-2 border-black bg-black/60 px-4 py-2 text-[10px] text-white">📍 {env.area}</div>
+  <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 border-2 border-black bg-black/60 px-4 py-2 text-sm font-semibold text-white">📍 {env.area}</div>
   {locked&&<div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-xl text-white mix-blend-difference">+</div>}
-  {locked&&(near||env.horse||env.riding)&&<div className="pointer-events-none absolute bottom-28 left-1/2 -translate-x-1/2 bg-black/70 px-4 py-3 text-center text-[10px] leading-5 text-white">
+  {locked&&(near||env.horse||env.riding)&&<div className="pointer-events-none absolute bottom-28 left-1/2 -translate-x-1/2 bg-black/70 px-4 py-3 text-center text-sm font-semibold leading-6 text-white">
    {near&&<div>[E] — {near.name}</div>}{env.riding?<div>[R] dismount horse</div>:env.horse&&<div>[R] ride the horse 🐎</div>}</div>}
-  {toast&&<div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 bg-black/70 px-4 py-2 text-xs text-yellow-300">{toast}</div>}
+  {toast&&<div className="pointer-events-none absolute left-1/2 top-16 -translate-x-1/2 bg-black/70 px-4 py-2 text-base font-semibold text-yellow-300">{toast}</div>}
   <div className="pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1 border-4 border-[#222] bg-black/60 p-1">
    {ORDER.map((t,i)=><div key={t} className={'relative flex h-14 w-14 items-center justify-center border-4 '+(selS===t?'border-white':'border-[#555]')}>
-    {t==='bow'?<span className="text-2xl">🏹</span>:<><div style={{background:COL[t]}} className="h-7 w-7 border border-black/40"/><span className="absolute bottom-0 right-1 text-[9px] text-white">{invS[t]||0}</span></>}
-    <i className="absolute left-1 top-0 text-[8px] not-italic text-white/70">{i+1}</i></div>)}</div>
-  <div className="pointer-events-none absolute left-3 top-3 text-[8px] leading-4 text-white drop-shadow">Explored {seen.length} · Skills hit {hits.length}/{SK.length}<br/>Follow the signs & minimap → gates:<br/>N Projects · W Skills · E Experience · S About</div>
+    {t==='bow'?<span className="text-2xl">🏹</span>:<><div style={{background:COL[t]}} className="h-7 w-7 border border-black/40"/><span className="absolute bottom-0 right-1 text-xs font-bold text-white">{invS[t]||0}</span></>}
+    <i className="absolute left-1 top-0 text-[11px] not-italic text-white/70">{i+1}</i></div>)}</div>
+  <div className="pointer-events-none absolute left-3 top-3 text-xs font-medium leading-5 text-white drop-shadow">Explored {seen.length} · Skills hit {hits.length}/{SK.length}<br/>Follow the road & signs. Long map: Projects (far N), Skills (NW), Experience (SE), About (far S)</div>
   {!locked&&!open&&<div onClick={()=>ctrl.current?.lock()} className="absolute inset-0 z-10 flex cursor-pointer flex-col items-center justify-center gap-6 bg-black/70 p-6 text-center text-white">
-   <h1 ref={title} className="text-2xl text-yellow-300 md:text-4xl">{ABOUT.name}'s World</h1>
-   <p className="text-[10px] leading-6">WASD move · Mouse look · Space jump / swim up · Shift sprint<br/>Hold Left Click: break · Right Click or F: place block · 1-7 blocks · 8 bow<br/>R: ride horse · E: interact · Esc: pause</p>
-   <p className="animate-pulse text-xs">Click to play</p></div>}
+   <h1 ref={title} className="title text-4xl text-yellow-300 md:text-6xl">{ABOUT.name}'s World</h1>
+   <p className="text-base leading-8">WASD move · Mouse look · Space jump / swim up · Shift sprint<br/>Hold Left Click: break · Right Click or F: place block · 1-7 blocks · 8 bow<br/>R: ride horse · E: interact · Esc: pause</p>
+   <p className="animate-pulse text-xl font-bold">Click to play</p></div>}
   {open&&<Panel id={open} hits={hits} onClose={close}/>}
  </div>}
